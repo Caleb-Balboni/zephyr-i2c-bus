@@ -1,0 +1,7 @@
+description: Temp Sensor
+
+compatible: "tsys01,sensor"
+
+include: base.yaml
+
+properties: {}

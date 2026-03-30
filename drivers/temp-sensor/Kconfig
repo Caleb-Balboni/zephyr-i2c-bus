@@ -1,0 +1,7 @@
+config TSYS01_SENSOR
+    bool "TSYS01 temperature sensor"
+    default n
+    depends on I2C
+    depends on HN_SPI2C
+    help
+      Enables the TSYS01 temperature sensor driver using Zephyr I2C API.

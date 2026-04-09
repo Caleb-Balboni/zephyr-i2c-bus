@@ -1,1 +1,0 @@
-add_subdirectory_ifdef(CONFIG_TSYS01_SENSOR temp-sensor)

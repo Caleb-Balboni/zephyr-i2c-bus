@@ -1,1 +1,1 @@
-rsource "drivers/Kconfig"
+rsource "i2c-bus-driver/Kconfig"

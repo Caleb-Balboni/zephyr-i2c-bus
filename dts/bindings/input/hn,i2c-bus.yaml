@@ -1,0 +1,11 @@
+description: I2C bus driver
+
+compatible: "hn,i2c-bus"
+
+include: base.yaml
+
+properties: 
+  i2c-controller:
+    type: phandle
+    required: true
+    description: the physical i2c connection

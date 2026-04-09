@@ -1,4 +1,4 @@
-name: temp-sensor
+name: i2c-bus
 build:
   cmake: .
   kconfig: Kconfig

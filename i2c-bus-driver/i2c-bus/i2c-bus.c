@@ -38,7 +38,8 @@ struct i2c_bus_packet_out {
 
 ////////////////////////////////////////////
 
-#define MAX_DATA_OUT_SIZE (MAX_TRANSACTION_SIZE - sizeof(struct spi2c_packet_out))
+#define MAX_TX_SIZE (MAX_TRANSACTION_SIZE - sizeof(struct spi2c_response))
+#define MAX_RX_SIZE (MAX_TRANSACTION_SIZE - sizeof(struct spi2c_request))
 
 struct i2c_bus_cfg {
 	const struct device* i2c_controller;    // the actual peripheral (eg: flexcomm) attached to the physical i2c devices
@@ -47,15 +48,15 @@ struct i2c_bus_cfg {
 struct i2c_bus_data {
 	const struct device* spi2c_dev;         // reference the the slaves spi driver
 	uint8_t reg_idx;                        // the register index of the driver itself (not associated with the address of i2c devices)
-	uint8_t rx_buf[MAX_DATA_OUT_SIZE];      // the registers data OUT buffer
+	uint8_t rx_buf[MAX_RX_SIZE];            // incoming packet from master (i2c command list)
+	uint8_t tx_buf[MAX_TX_SIZE];            // outgoing packet to master (status + read results)
 };
 
-static void i2c_bus_receive(const struct device *dev, uint8_t *in_data, size_t data_size, spi2c_reg_notify_t notify) {
-  printk("i2c bus got msg\n");
+static void i2c_bus_receive(const struct device *dev, uint16_t data_size, uint16_t offset, spi2c_reg_notify_t notify) {
 	struct i2c_bus_data* data = dev->data;
 	const struct i2c_bus_cfg* cfg = dev->config;
-  struct i2c_bus_packet_out* out = (struct i2c_bus_packet_out*)data->rx_buf;
-  struct i2c_bus_packet_in* in = (struct i2c_bus_packet_in*)in_data;
+  struct i2c_bus_packet_in* in = (struct i2c_bus_packet_in*)data->rx_buf;
+  struct i2c_bus_packet_out* out = (struct i2c_bus_packet_out*)data->tx_buf;
   uint16_t rx_read_offset = 0;  // the current offset into the rx data
   uint8_t* cursor = (uint8_t*)in->msgs;
   struct i2c_msg msgs[in->num_msgs];
@@ -72,6 +73,9 @@ static void i2c_bus_receive(const struct device *dev, uint8_t *in_data, size_t d
       msgs[i].buf = cursor;
       cursor += cur_in_msg->len;
     }
+    if (i > 0) {
+      msgs[i].flags |= I2C_MSG_RESTART;
+    }
   }
   msgs[in->num_msgs - 1].flags |= I2C_MSG_STOP;
   int ret = i2c_transfer(cfg->i2c_controller, msgs, in->num_msgs, in->addr);
@@ -83,31 +87,20 @@ static void i2c_bus_receive(const struct device *dev, uint8_t *in_data, size_t d
 	notify(data->spi2c_dev, data->reg_idx, DEVICE_UPDATE);
 }
 
-static uint8_t* i2c_bus_get_data(const struct device *dev) {
-	struct i2c_bus_data *data = dev->data;
-	return (uint8_t*)data->rx_buf;
-}
-
-static size_t i2c_bus_get_data_size(const struct device *dev) {
-	return MAX_DATA_OUT_SIZE;
-}
-
-static uint8_t i2c_bus_get_flags(const struct device *dev) {
-	return REG_READABLE | REG_WRITEABLE;
-}
-
-static void i2c_bus_bind(const struct device* dev, const struct device* spi2c_dev, uint8_t reg_idx) {
+static void i2c_bus_init_reg(const struct device* dev, struct spi2c_reg* reg, const struct device* spi2c_dev) {
   struct i2c_bus_data* data = (struct i2c_bus_data*)dev->data;
   data->spi2c_dev = spi2c_dev;
-  data->reg_idx = reg_idx;
+  data->reg_idx = reg->idx;
+  reg->flags = REG_READABLE | REG_WRITEABLE;
+  reg->rx_size = sizeof(data->rx_buf);
+  reg->rx_buffer = data->rx_buf;
+  reg->tx_size = sizeof(data->tx_buf);
+  reg->tx_buffer = data->tx_buf;
 }
 
 static const struct custom_dev_api i2c_bus_driver_api = {
-	.bind = i2c_bus_bind,
+	.init_reg = i2c_bus_init_reg,
 	.receive = i2c_bus_receive,
-	.get_data = i2c_bus_get_data,
-	.get_data_size = i2c_bus_get_data_size,
-	.get_flags = i2c_bus_get_flags,
 };
 
 #define I2CBUS_DEFINE(inst)                                                     \
